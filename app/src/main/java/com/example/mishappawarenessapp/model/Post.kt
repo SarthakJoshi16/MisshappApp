@@ -1,11 +1,18 @@
 package com.example.mishappawarenessapp.model
 
+import android.media.browse.MediaBrowser.MediaItem
+
 
 data class Post(
-    val username: String,      // who posted
-    val content: String,       // text content
-    val imageRes: Int?,        // optional image
-    val upvotes: Int,          // likes
-    val downvotes: Int,        // dislikes
-    val timestamp: String      // time info
+    var id: String = "",
+    val userId: String = "",
+    val username: String = "",
+    val content: String = "",
+    val media: List<MediaItem> = emptyList(),   // to store media
+    val likes: Int = 0,
+    val dislikes: Int = 0,
+    val likedBy: List<String> = emptyList(),     // storing peoples who likes in array
+    val dislikedBy: List<String> = emptyList(),   // storing disliked people in array. (to make interaction unique)
+    val timestamp: com.google.firebase.Timestamp? = null
 )
+
