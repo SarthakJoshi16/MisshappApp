@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("androidx.navigation.safeargs.kotlin")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -57,12 +58,19 @@ dependencies {
     // Google Maps
     implementation("com.google.android.gms:play-services-maps:18.1.0")
 
+    // Google Maps & Location
+    implementation("com.google.android.gms:play-services-maps:18.2.0")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+
+
+
     // Firebase (using BOM for version alignment)
     implementation(platform("com.google.firebase:firebase-bom:33.0.0"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-storage")
     implementation("com.google.firebase:firebase-messaging")
+    implementation("com.squareup.picasso:picasso:2.8")
 
     // Compose (auto-managed via libs.versions.toml)
     implementation(libs.androidx.core.ktx)
@@ -77,6 +85,8 @@ dependencies {
     // Optional (for View-based UI)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.fragment)
+    implementation(libs.play.services.maps)
+
 
     // Testing
     testImplementation(libs.junit)
@@ -87,4 +97,3 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }
-apply(plugin = "com.google.gms.google-services")

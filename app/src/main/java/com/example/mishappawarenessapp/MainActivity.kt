@@ -28,7 +28,7 @@ class MainActivity : AppCompatActivity() {
         binding.bottomNav.setupWithNavController(navController)
 
         // ✅ Optional toolbar setup (only if you actually have one in your layout)
-        // setSupportActionBar(binding.topAppBar)
+        setSupportActionBar(binding.topAppBar)
 
         // ✅ FloatingActionButton click listener
         binding.fabPost.setOnClickListener {
