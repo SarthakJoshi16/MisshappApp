@@ -1,12 +1,11 @@
 package supabase
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
 import io.github.jan.supabase.storage.storage
 import java.io.ByteArrayOutputStream
 import java.io.File
-import android.graphics.Bitmap
-
 
 // ---------------- POST MEDIA UPLOAD ----------------
 
@@ -23,12 +22,13 @@ suspend fun uploadPostMedia(
 
     Log.d("UPLOAD_POST", "Uploading to media/$path")
 
+    val bytes = safeMediaBytes(file)
+
     bucket.upload(
         path = path,
-        data = safeImageBytes(file),
+        data = bytes,
         upsert = true
     )
-
 
     return bucket.publicUrl(path)
 }
@@ -49,24 +49,36 @@ suspend fun uploadProfileImage(
 
     bucket.upload(
         path = path,
-        data = safeImageBytes(file), // ✅ SAFE
+        data = safeImageBytes(file), // profile images are ALWAYS images
         upsert = true
     )
 
     return bucket.publicUrl(path)
 }
 
-// ---------------- IMAGE COMPRESSION (CRASH FIX) ----------------
+// ---------------- MEDIA BYTE HANDLING (THE REAL FIX) ----------------
+
+private fun safeMediaBytes(file: File): ByteArray {
+    return if (isVideoFile(file)) {
+        Log.d("UPLOAD_MEDIA", "Detected video file, uploading raw bytes")
+        file.readBytes() // ✅ DO NOT decode video
+    } else {
+        Log.d("UPLOAD_MEDIA", "Detected image file, compressing")
+        safeImageBytes(file)
+    }
+}
+
+// ---------------- IMAGE COMPRESSION (SAFE) ----------------
 
 private fun safeImageBytes(file: File): ByteArray {
+
     val options = BitmapFactory.Options().apply {
         inJustDecodeBounds = true
     }
 
-    // Read image dimensions ONLY
+    // Read image bounds only
     BitmapFactory.decodeFile(file.path, options)
 
-    // Calculate downscale factor (max 1024px)
     options.inSampleSize = calculateInSampleSize(options, 1024, 1024)
     options.inJustDecodeBounds = false
 
@@ -74,10 +86,22 @@ private fun safeImageBytes(file: File): ByteArray {
         ?: throw IllegalStateException("Bitmap decode failed")
 
     val output = ByteArrayOutputStream()
-    bitmap.compress(Bitmap.CompressFormat.JPEG, 70, output)
+    bitmap.compress(Bitmap.CompressFormat.JPEG, 75, output)
     bitmap.recycle()
 
     return output.toByteArray()
+}
+
+// ---------------- HELPERS ----------------
+
+private fun isVideoFile(file: File): Boolean {
+    return file.extension.lowercase() in listOf(
+        "mp4",
+        "mkv",
+        "webm",
+        "mov",
+        "3gp"
+    )
 }
 
 private fun calculateInSampleSize(
@@ -85,15 +109,12 @@ private fun calculateInSampleSize(
     reqWidth: Int,
     reqHeight: Int
 ): Int {
-    val (height: Int, width: Int) = options.run {
-        outHeight to outWidth
-    }
-
+    val (height, width) = options.outHeight to options.outWidth
     var inSampleSize = 1
 
     if (height > reqHeight || width > reqWidth) {
-        val halfHeight = height / 2
-        val halfWidth = width / 2
+        var halfHeight = height / 2
+        var halfWidth = width / 2
 
         while (
             halfHeight / inSampleSize >= reqHeight &&
@@ -102,8 +123,5 @@ private fun calculateInSampleSize(
             inSampleSize *= 2
         }
     }
-
     return inSampleSize
 }
-
-

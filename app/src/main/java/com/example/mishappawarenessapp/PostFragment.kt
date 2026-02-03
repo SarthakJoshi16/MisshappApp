@@ -1,20 +1,17 @@
 package com.example.mishappawarenessapp
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.location.Location
 import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.*
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -24,7 +21,9 @@ import com.google.android.gms.location.LocationServices
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import supabase.uploadPostMedia
 import java.io.File
 
@@ -36,27 +35,19 @@ class PostFragment : Fragment() {
     private val selectedMedia = mutableListOf<Uri>()
     private val MAX_MEDIA = 5
 
-    private var mediaAdapter: MediaPreviewAdapter? = null
-
+    private lateinit var mediaAdapter: MediaPreviewAdapter
     private lateinit var mediaCountText: TextView
     private lateinit var postButton: Button
     private lateinit var progressBar: ProgressBar
     private lateinit var progressText: TextView
 
-    /* -------- LOCATION -------- */
     private lateinit var fusedLocationClient: FusedLocationProviderClient
-    private var latitude: Double? = null
-    private var longitude: Double? = null
-
-    /* ---------------- VIEW ---------------- */
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View {
-        return inflater.inflate(R.layout.fragment_post, container, false)
-    }
+    ): View = inflater.inflate(R.layout.fragment_post, container, false)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -68,20 +59,17 @@ class PostFragment : Fragment() {
 
         val postContent = view.findViewById<EditText>(R.id.postContent)
         val addMediaButton = view.findViewById<Button>(R.id.btnAddMedia)
-        val addLocationButton = view.findViewById<Button>(R.id.btnAddLocation)
-
         postButton = view.findViewById(R.id.btnPost)
+
         progressBar = view.findViewById(R.id.uploadProgressBar)
         progressText = view.findViewById(R.id.uploadProgressText)
-
         mediaCountText = view.findViewById(R.id.mediaCountText)
-        val mediaRecycler = view.findViewById<RecyclerView>(R.id.mediaPreviewRecycler)
 
-        /* -------- MEDIA PREVIEW -------- */
+        val mediaRecycler = view.findViewById<RecyclerView>(R.id.mediaPreviewRecycler)
 
         mediaAdapter = MediaPreviewAdapter(selectedMedia) { index ->
             selectedMedia.removeAt(index)
-            mediaAdapter?.notifyDataSetChanged()
+            mediaAdapter.notifyDataSetChanged()
             mediaCountText.text = "${selectedMedia.size} / 5 selected"
         }
 
@@ -89,17 +77,7 @@ class PostFragment : Fragment() {
             LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
         mediaRecycler.adapter = mediaAdapter
 
-        mediaCountText.text = "0 / 5 selected"
-
-        /* -------- BUTTONS -------- */
-
-        addMediaButton.setOnClickListener {
-            requestMediaPermission()
-        }
-
-        addLocationButton.setOnClickListener {
-            requestLocation()
-        }
+        addMediaButton.setOnClickListener { openMediaPicker() }
 
         postButton.setOnClickListener {
             val content = postContent.text.toString().trim()
@@ -111,163 +89,143 @@ class PostFragment : Fragment() {
         }
     }
 
-    /* ---------------- LOCATION ---------------- */
+    /* ---------------- MEDIA PICKER ---------------- */
 
-    private val locationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) {
-                fetchLocation()
-            } else {
-                Toast.makeText(requireContext(), "Location permission denied", Toast.LENGTH_SHORT).show()
+    private val mediaPickerLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.PickMultipleVisualMedia(MAX_MEDIA)
+        ) { uris ->
+            if (uris.isNotEmpty()) {
+                selectedMedia.clear()
+                selectedMedia.addAll(uris)
+                mediaAdapter.notifyDataSetChanged()
+                mediaCountText.text = "${selectedMedia.size} / 5 selected"
             }
         }
 
-    private fun requestLocation() {
-        if (ContextCompat.checkSelfPermission(
-                requireContext(),
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            fetchLocation()
-        } else {
-            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
+    private fun openMediaPicker() {
+        mediaPickerLauncher.launch(
+            PickVisualMediaRequest(
+                ActivityResultContracts.PickVisualMedia.ImageAndVideo
+            )
+        )
     }
 
-    private fun fetchLocation() {
-        fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
-            if (location != null) {
-                latitude = location.latitude
-                longitude = location.longitude
-                Toast.makeText(requireContext(), "Location added 📍", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(requireContext(), "Unable to fetch location", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    /* ---------------- UPLOAD + POST ---------------- */
+    /* ---------------- UPLOAD ---------------- */
 
     private fun uploadMediaAndCreatePost(content: String) {
-        val currentUser = auth.currentUser ?: return
 
-        setUploadingState(true)
-        progressBar.progress = 0
-        progressText.text = "Uploading 0%"
+        Log.d("PostFragment", "Upload started. Media count = ${selectedMedia.size}")
 
-        val uploadedMedia = mutableListOf<Map<String, String>>()
-
-        if (selectedMedia.isEmpty()) {
-            savePost(content, uploadedMedia)
-            return
-        }
+        val user = auth.currentUser ?: return
+        setUploading(true)
 
         lifecycleScope.launch {
             try {
-                selectedMedia.forEach { uri ->
-                    val type = if (isVideo(uri)) "video" else "image"
-                    val file = uriToCompressedFile(uri)
-                    val url = uploadPostMedia(file, currentUser.uid)
+                val uploadedMedia = mutableListOf<Map<String, String>>()
 
-                    uploadedMedia.add(mapOf("url" to url, "type" to type))
+                for (uri in selectedMedia) {
 
-                    val percent = (uploadedMedia.size * 100) / selectedMedia.size
-                    progressBar.progress = percent
-                    progressText.text = "Uploading $percent%"
+                    val isVideo = isVideo(uri)
+                    Log.d("PostFragment", "Uploading URI=$uri isVideo=$isVideo")
+
+                    val mediaFile = withContext(Dispatchers.IO) {
+                        if (isVideo) uriToVideoFile(uri)
+                        else compressImage(uri)
+                    }
+
+                    val mediaUrl = uploadPostMedia(mediaFile, user.uid)
+
+                    var thumbUrl: String? = null
+                    if (isVideo) {
+                        generateVideoThumbnail(uri)?.let { bmp ->
+                            val thumbFile = bitmapToFile(bmp)
+                            thumbUrl = uploadPostMedia(thumbFile, user.uid)
+                        }
+                    }
+
+                    uploadedMedia.add(
+                        mutableMapOf(
+                            "url" to mediaUrl,
+                            "type" to if (isVideo) "video" else "image"
+                        ).apply {
+                            thumbUrl?.let { put("thumbnail", it) }
+                        }
+                    )
                 }
 
                 savePost(content, uploadedMedia)
 
             } catch (e: Exception) {
+                Log.e("PostFragment", "Upload failed", e)
                 Toast.makeText(requireContext(), "Upload failed", Toast.LENGTH_SHORT).show()
-                setUploadingState(false)
+                setUploading(false)
             }
         }
-    }
-
-    private fun savePost(content: String, media: List<Map<String, String>>) {
-        val currentUser = auth.currentUser ?: return
-
-        val post = hashMapOf(
-            "userId" to currentUser.uid,
-            "username" to (currentUser.email ?: "Anonymous"),
-            "content" to content,
-            "media" to media,
-            "latitude" to latitude,
-            "longitude" to longitude,
-            "likes" to 0,
-            "dislikes" to 0,
-            "likedBy" to emptyList<String>(),
-            "dislikedBy" to emptyList<String>(),
-            "timestamp" to FieldValue.serverTimestamp()
-        )
-
-        firestore.collection("posts")
-            .add(post)
-            .addOnSuccessListener {
-                Toast.makeText(requireContext(), "Post published", Toast.LENGTH_SHORT).show()
-                resetState()
-                parentFragmentManager.popBackStack()
-            }
-            .addOnFailureListener {
-                setUploadingState(false)
-            }
-    }
-
-    private fun resetState() {
-        latitude = null
-        longitude = null
-        selectedMedia.clear()
-        mediaAdapter?.notifyDataSetChanged()
-        mediaCountText.text = "0 / 5 selected"
-        setUploadingState(false)
     }
 
     /* ---------------- HELPERS ---------------- */
 
-    private fun setUploadingState(uploading: Boolean) {
-        postButton.isEnabled = !uploading
-        progressBar.visibility = if (uploading) View.VISIBLE else View.GONE
-        progressText.visibility = if (uploading) View.VISIBLE else View.GONE
+    private fun compressImage(uri: Uri): File {
+        val input = requireContext().contentResolver.openInputStream(uri)!!
+        val original = File.createTempFile("img_", ".jpg", requireContext().cacheDir)
+        input.copyTo(original.outputStream())
+        val bitmap = BitmapFactory.decodeFile(original.absolutePath)
+            ?: throw IllegalStateException("Bitmap decode failed")
+        val out = File.createTempFile("compressed_", ".jpg", requireContext().cacheDir)
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, out.outputStream())
+        return out
     }
 
-    private fun isVideo(uri: Uri): Boolean {
-        val type = requireContext().contentResolver.getType(uri)
-        return type?.startsWith("video/") == true
+    private fun uriToVideoFile(uri: Uri): File {
+        val file = File.createTempFile("video_", ".mp4", requireContext().cacheDir)
+        requireContext().contentResolver.openInputStream(uri)!!
+            .copyTo(file.outputStream())
+        return file
     }
 
-    private fun isVideoTooLong(uri: Uri): Boolean {
-        return try {
-            val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(requireContext(), uri)
-            val duration =
-                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLong() ?: 0
-            retriever.release()
-            duration > 90_000
+    private fun generateVideoThumbnail(uri: Uri): Bitmap? =
+        try {
+            MediaMetadataRetriever().run {
+                setDataSource(requireContext(), uri)
+                val bmp = getFrameAtTime(1_000_000)
+                release()
+                bmp
+            }
         } catch (e: Exception) {
-            false
+            null
         }
+
+    private fun bitmapToFile(bitmap: Bitmap): File {
+        val file = File.createTempFile("thumb_", ".jpg", requireContext().cacheDir)
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, file.outputStream())
+        return file
     }
 
-    private fun uriToCompressedFile(uri: Uri): File {
-        val inputStream = requireContext().contentResolver.openInputStream(uri)
-        val originalFile = File.createTempFile("orig_", ".jpg", requireContext().cacheDir)
+    private fun isVideo(uri: Uri): Boolean =
+        requireContext().contentResolver.getType(uri)?.startsWith("video/") == true
 
-        originalFile.outputStream().use { output ->
-            inputStream?.copyTo(output)
-        }
-
-        val bitmap = BitmapFactory.decodeFile(originalFile.absolutePath)
-        val compressedFile = File.createTempFile("compressed_", ".jpg", requireContext().cacheDir)
-
-        compressedFile.outputStream().use { out ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 70, out)
-        }
-
-        return compressedFile
+    private fun setUploading(state: Boolean) {
+        postButton.isEnabled = !state
+        progressBar.visibility = if (state) View.VISIBLE else View.GONE
+        progressText.visibility = if (state) View.VISIBLE else View.GONE
     }
-}
 
-private fun PostFragment.requestMediaPermission() {
-    TODO("Not yet implemented")
+    private fun savePost(content: String, media: List<Map<String, String>>) {
+        val user = auth.currentUser ?: return
+        firestore.collection("posts")
+            .add(
+                hashMapOf(
+                    "userId" to user.uid,
+                    "username" to (user.email ?: "Anonymous"),
+                    "content" to content,
+                    "media" to media,
+                    "timestamp" to FieldValue.serverTimestamp()
+                )
+            )
+            .addOnSuccessListener {
+                Toast.makeText(requireContext(), "Post published", Toast.LENGTH_SHORT).show()
+                parentFragmentManager.popBackStack()
+            }
+    }
 }
