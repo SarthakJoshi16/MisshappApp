@@ -7,7 +7,7 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <!-- 1. AppBarLayout to hold the Toolbar. This is needed for scrolling behaviors. -->
+    <!-- ================= TOP APP BAR ================= -->
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/appBarLayout"
         android:layout_width="match_parent"
@@ -17,53 +17,57 @@
             android:id="@+id/topAppBar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:background="?attr/colorPrimary"
-            android:theme="@style/ThemeOverlay.Material3.Dark.ActionBar"
+            android:background="#2FB6E9"
             app:title="Mishapp Awareness App"
-            app:titleCentered="true" />
+            app:titleCentered="true"
+            app:titleTextColor="@android:color/white" />
 
     </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- 2. Main content area. It fills the space between the toolbar and bottom nav. -->
+    <!-- ================= MAIN CONTENT (FRAGMENTS) ================= -->
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/nav_host_fragment"
         android:name="androidx.navigation.fragment.NavHostFragment"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:layout_marginBottom="64dp"
         app:defaultNavHost="true"
         app:layout_behavior="@string/appbar_scrolling_view_behavior"
         app:navGraph="@navigation/nav_graph" />
-
-    <!-- 3. BottomAppBar to anchor the FAB and hold the BottomNavigationView. -->
+    <!-- ================= BOTTOM APP BAR ================= -->
     <com.google.android.material.bottomappbar.BottomAppBar
         android:id="@+id/bottomAppBar"
+        style="@style/Widget.App.BottomAppBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        app:fabCradleMargin="10dp"
-        app:fabCradleRoundedCornerRadius="10dp"
-        app:fabCradleVerticalOffset="10dp">
+        android:layout_gravity="bottom">
 
         <com.google.android.material.bottomnavigation.BottomNavigationView
             android:id="@+id/bottom_nav"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="16dp"
+            android:layout_height="wrap_content"
             android:background="@android:color/transparent"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            app:itemIconTint="#444444"
+            app:itemTextColor="#444444"
             app:menu="@menu/bottom_nav_menu" />
 
     </com.google.android.material.bottomappbar.BottomAppBar>
 
-    <!-- 4. Floating Action Button anchored to the BottomAppBar. -->
+    <!-- ================= FLOATING ACTION BUTTON (+) ================= -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabPost"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:contentDescription="Post Incident"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="32dp"
+        android:layout_marginBottom="88dp"
+        android:contentDescription="Add Post"
         android:src="@drawable/ic_add"
-        app:backgroundTint="@color/purple_500"
-        app:layout_anchor="@id/bottomAppBar"
+        app:backgroundTint="#2FB6E9"
+        app:elevation="14dp"
+        app:pressedTranslationZ="18dp"
         app:tint="@android:color/white" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
-

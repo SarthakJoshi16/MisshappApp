@@ -1,19 +1,20 @@
-package com.example.mishappawarenessapp
+package com.example.mishappawarenessapp.ui.home
 
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.util.Log
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.mishappawarenessapp.R
 import com.example.mishappawarenessapp.model.Post
+import com.example.mishappawarenessapp.ui.CommentBottomSheet
+import com.google.firebase.firestore.DocumentChange
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-import com.google.firebase.firestore.DocumentChange
-import android.widget.Toast
-import com.example.mishappawarenessapp.ui.home.PostAdapter
 
 class HomeFragment : Fragment() {
 
@@ -21,7 +22,6 @@ class HomeFragment : Fragment() {
     private lateinit var postAdapter: PostAdapter
     private val postList = mutableListOf<Post>()
     private var isFirstLoad = true
-
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -42,20 +42,13 @@ class HomeFragment : Fragment() {
         postAdapter = PostAdapter(postList)
         recyclerView.adapter = postAdapter
 
-        postAdapter.onCommentClick = { postId ->
+        postAdapter.onCommentClick = { postId: String ->
             CommentBottomSheet
                 .newInstance(postId)
                 .show(parentFragmentManager, "CommentBottomSheet")
         }
 
-
-
-
-        postAdapter.notifyDataSetChanged()
-
-
         fetchPosts()
-
     }
 
     private fun fetchPosts() {
@@ -63,31 +56,37 @@ class HomeFragment : Fragment() {
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshots, error ->
 
-                if (error != null || snapshots == null) return@addSnapshotListener
-
-                // Detect new post only AFTER first load
-                if (!isFirstLoad && snapshots.documentChanges.any {
-                        it.type == DocumentChange.Type.ADDED
-                    }) {
-                    Toast.makeText(
-                        requireContext(),
-                        "Post published",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                if (error != null) {
+                    Log.e("HomeFragment", "Error fetching posts", error)
+                    return@addSnapshotListener
                 }
 
-                postList.clear()
-                for (doc in snapshots) {
-                    val post = doc.toObject(Post::class.java)
-                    post.id = doc.id
-                    postList.add(post)
+                if (snapshots == null) return@addSnapshotListener
 
+                if (isFirstLoad) postList.clear()
+
+                for (change in snapshots.documentChanges) {
+                    val post = change.document.toObject(Post::class.java).apply {
+                        id = change.document.id
+                    }
+
+                    when (change.type) {
+                        DocumentChange.Type.ADDED -> {
+                            postList.add(change.newIndex, post)
+                            postAdapter.notifyItemInserted(change.newIndex)
+                        }
+                        DocumentChange.Type.MODIFIED -> {
+                            postList[change.newIndex] = post
+                            postAdapter.notifyItemChanged(change.newIndex)
+                        }
+                        DocumentChange.Type.REMOVED -> {
+                            postList.removeAt(change.oldIndex)
+                            postAdapter.notifyItemRemoved(change.oldIndex)
+                        }
+                    }
                 }
-
-                postAdapter.notifyDataSetChanged()
 
                 isFirstLoad = false
             }
     }
-
 }
