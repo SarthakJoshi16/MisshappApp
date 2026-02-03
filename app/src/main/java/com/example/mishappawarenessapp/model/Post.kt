@@ -1,18 +1,22 @@
 package com.example.mishappawarenessapp.model
 
-import com.example.mishappawarenessapp.models.PostMedia
-
+import com.example.mishappawarenessapp.model.PostMedia
+import com.google.firebase.Timestamp
 
 data class Post(
     var id: String = "",
-    val userId: String = "",
-    val username: String = "",
-    val content: String = "",
-    var media: List<PostMedia> = emptyList(),   // to store media
-    val likes: Int = 0,
-    val dislikes: Int = 0,
-    val likedBy: List<String> = emptyList(),     // storing peoples who likes in array
-    val dislikedBy: List<String> = emptyList(),   // storing disliked people in array. (to make interaction unique)
-    val timestamp: com.google.firebase.Timestamp? = null,
-    var commentCount: Long? = 0
+    var userId: String = "",
+    var username: String = "",
+    var content: String = "",
+
+    var media: List<PostMedia> = emptyList(),
+
+    var likes: Long = 0,
+    var dislikes: Long = 0,
+    var commentCount: Long = 0,
+
+    var likedBy: List<String> = emptyList(),
+    var dislikedBy: List<String> = emptyList(),
+
+    var timestamp: Timestamp? = null
 )
