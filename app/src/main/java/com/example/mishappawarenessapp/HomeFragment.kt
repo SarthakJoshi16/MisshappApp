@@ -20,7 +20,6 @@ class HomeFragment : Fragment() {
     private lateinit var firestore: FirebaseFirestore
     private lateinit var postAdapter: PostAdapter
     private val postList = mutableListOf<Post>()
-    private var isFirstLoad = true
 
 
     override fun onCreateView(
@@ -65,29 +64,16 @@ class HomeFragment : Fragment() {
 
                 if (error != null || snapshots == null) return@addSnapshotListener
 
-                // Detect new post only AFTER first load
-                if (!isFirstLoad && snapshots.documentChanges.any {
-                        it.type == DocumentChange.Type.ADDED
-                    }) {
-                    Toast.makeText(
-                        requireContext(),
-                        "Post published",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-
                 postList.clear()
                 for (doc in snapshots) {
                     val post = doc.toObject(Post::class.java)
                     post.id = doc.id
                     postList.add(post)
-
                 }
 
                 postAdapter.notifyDataSetChanged()
-
-                isFirstLoad = false
             }
     }
+
 
 }

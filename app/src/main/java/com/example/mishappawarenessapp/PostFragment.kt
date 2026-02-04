@@ -1,14 +1,17 @@
 package com.example.mishappawarenessapp
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.Manifest
 import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.*
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -20,6 +23,7 @@ import com.google.firebase.storage.FirebaseStorage
 import java.io.File
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import supabase.uploadPostMedia
 import android.graphics.BitmapFactory
 import android.graphics.Bitmap
@@ -33,8 +37,7 @@ class PostFragment : Fragment() {
     private val selectedMedia = mutableListOf<Uri>()
     private val MAX_MEDIA = 5
 
-    private var mediaAdapter: MediaPreviewAdapter? = null
-
+    private lateinit var mediaAdapter: MediaPreviewAdapter
     private lateinit var mediaCountText: TextView
     private lateinit var postButton: Button
     private lateinit var progressBar: ProgressBar
@@ -46,9 +49,7 @@ class PostFragment : Fragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View {
-        return inflater.inflate(R.layout.fragment_post, container, false)
-    }
+    ): View = inflater.inflate(R.layout.fragment_post, container, false)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -59,17 +60,16 @@ class PostFragment : Fragment() {
         val postContent = view.findViewById<EditText>(R.id.postContent)
         val addMediaButton = view.findViewById<Button>(R.id.btnAddMedia)
         postButton = view.findViewById(R.id.btnPost)
+
         progressBar = view.findViewById(R.id.uploadProgressBar)
         progressText = view.findViewById(R.id.uploadProgressText)
-
         mediaCountText = view.findViewById(R.id.mediaCountText)
-        val mediaRecycler = view.findViewById<RecyclerView>(R.id.mediaPreviewRecycler)
 
         /* -------- MEDIA PREVIEW SETUP (CRITICAL) -------- */
 
         mediaAdapter = MediaPreviewAdapter(selectedMedia) { index ->
             selectedMedia.removeAt(index)
-            mediaAdapter?.notifyDataSetChanged()
+            mediaAdapter.notifyDataSetChanged()
             mediaCountText.text = "${selectedMedia.size} / 5 selected"
         }
 
@@ -157,21 +157,14 @@ class PostFragment : Fragment() {
             mediaCountText.text = "${selectedMedia.size} / 5 selected"
         }
 
-    /* ---------------- UPLOAD + POST ---------------- */
+    /* ---------------- UPLOAD ---------------- */
 
     private fun uploadMediaAndCreatePost(content: String) {
-        val currentUser = auth.currentUser ?: return
 
-        setUploadingState(true)
-        progressBar.progress = 0
-        progressText.text = "Uploading 0%"
+        Log.d("PostFragment", "Upload started. Media count = ${selectedMedia.size}")
 
-        val uploadedMedia = mutableListOf<Map<String, String>>()
-
-        if (selectedMedia.isEmpty()) {
-            savePost(content, uploadedMedia)
-            return
-        }
+        val user = auth.currentUser ?: return
+        setUploading(true)
 
         lifecycleScope.launch {
             try {
@@ -199,8 +192,9 @@ class PostFragment : Fragment() {
                 savePost(content, uploadedMedia)
 
             } catch (e: Exception) {
+                Log.e("PostFragment", "Upload failed", e)
                 Toast.makeText(requireContext(), "Upload failed", Toast.LENGTH_SHORT).show()
-                setUploadingState(false)
+                setUploading(false)
             }
         }
     }
@@ -280,11 +274,13 @@ class PostFragment : Fragment() {
         val compressedFile =
             File.createTempFile("compressed_", ".jpg", requireContext().cacheDir)
 
-        compressedFile.outputStream().use { out ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 70, out)
-        }
+    private fun isVideo(uri: Uri): Boolean =
+        requireContext().contentResolver.getType(uri)?.startsWith("video/") == true
 
-        return compressedFile
+    private fun setUploading(state: Boolean) {
+        postButton.isEnabled = !state
+        progressBar.visibility = if (state) View.VISIBLE else View.GONE
+        progressText.visibility = if (state) View.VISIBLE else View.GONE
     }
 
 
